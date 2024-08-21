@@ -12,6 +12,7 @@ https://github.com/ixora-0/Minesweeper
 from state import MineState
 from human_agent import HumanAgent
 from action import Action
+from tools import get_action_timed
 
 pygame.init()
 
@@ -76,6 +77,7 @@ class Grid:
         self.__mines = mines  # List of mines around the grid
         self.neighbors = np.zeros(9, dtype=Grid)  # Neighbors of the grid, when 0 no neighbors
 
+    # Maybe not needed
     def __int__(self):
         if self.clicked:
             return self.__val
@@ -143,24 +145,24 @@ class Grid:
                 if self.x + x >= 0 and self.x + x < game_width:
                     for y in range(-1, 2):
                         if self.y + y >= 0 and self.y + y < game_height:
-                            if not grid[self.y + y][self.x + x].clicked:
-                                grid[self.y + y][self.x + x].revealGrid(state, depth + 1)
+                            if not state.getGrid()[self.y + y][self.x + x].clicked:
+                                state.getGrid()[self.y + y][self.x + x].revealGrid(state, depth + 1)
         elif depth == 0 and self.__val == -1:
             state.lose()
             self.mineClicked = True
             # Auto reveal all mines if it's a mine
             print("Revealing all mines")
             for m in self.__mines:
-                if not grid[m[1]][m[0]].clicked and not grid[m[1]][m[0]].flag:
-                    grid[m[1]][m[0]].revealGrid(state, depth + 1)
+                if not state.getGrid()[m[1]][m[0]].clicked and not state.getGrid()[m[1]][m[0]].flag:
+                    state.getGrid()[m[1]][m[0]].revealGrid(state, depth + 1)
             # Auto flag all wrong flags
             for i in range(game_height):
                 for j in range(game_width):
-                    if grid[i][j].flag and grid[i][j].__val != -1:
-                        grid[i][j].mineFalse = True
+                    if state.getGrid()[i][j].flag and state.getGrid()[i][j].__val != -1:
+                        state.getGrid()[i][j].mineFalse = True
         
 
-    def updateValue(self):
+    def updateValue(self, grid):
         # Update the value when all grid is generated
         if self.__val != -1:
             for x in range(-1, 2):
@@ -201,39 +203,39 @@ class Grid:
             return False
         return True
 
+def generateMines(width, height, numMine):
+    mines = np.zeros((numMine, 2), dtype=int)
+    for c in range(numMine):
+        pos = ([random.randrange(0, width),
+               random.randrange(0, height)])
+        # Check if the mine is already there
+        while (pos == mines).all(axis=1).any():
+            pos = np.array([random.randrange(0, width),
+                   random.randrange(0, height)])
+        mines[c] = pos
+    return mines
+
+def generateGrid(width, height, mines):
+    grid = np.zeros((height, width), dtype=Grid)
+    for j in range(height):
+        for i in range(width):
+            if ((i, j) == mines).all(axis=1).any():
+                grid[j][i] = Grid(i, j, -1, mines)
+            else:
+                grid[j][i] = Grid(i, j, 0)
+    for j in range(height):
+        for i in range(width):
+            grid[j][i].updateValue(grid)
+    return grid
+    
 
 def gameLoop():
-    global grid  # Access global var
-    grid = []
-    mines = []
     t = 0  # Set time to 0
 
-    # Generating mines
-    for c in range(numMine):
-        pos = [random.randrange(0, game_width),
-               random.randrange(0, game_height)]
-        # Check if the mine is already there
-        while pos in mines:
-            pos = [random.randrange(0, game_width),
-                   random.randrange(0, game_height)]
-        mines.append(pos)
-
-    # Generating entire grid
-    for j in range(game_height):
-        line = []
-        for i in range(game_width):
-            if [i, j] in mines:
-                line.append(Grid(i, j, -1, mines))
-            else:
-                line.append(Grid(i, j, 0))
-        grid.append(line)
-
-    # Update of the grid
-    for i in grid:
-        for j in i:
-            j.updateValue()
-
-    state = MineState(game_width, game_height, numMine, grid)
+    state = MineState(game_width, 
+                      game_height, 
+                      numMine, 
+                      generateGrid(game_width, game_height, generateMines(game_width, game_height, numMine)))
     agent = HumanAgent()
 
 
@@ -270,31 +272,33 @@ def gameLoop():
         gameDisplay.blit(screen_text, (display_width - border - 50, border))
 
         pygame.display.update()  # Update screen
+        pygame.display.update()  # Update screen
+
+
+        action = get_action_timed(agent, state, 1/30)
+        if action:
+            match action.get_name():
+                case "Exit":
+                    state.exit()
+                case "Restart":
+                    state.exit()
+                    gameLoop()
+                case "Flag":
+                    action.get_grid().toggleFlag(state) if not action.get_grid().clicked else None
+                case "Reveal":
+                    # ignore if flagged
+                    if action.get_grid().flag:
+                        continue
+                    # If player left clicked of the grid
+                    action.get_grid().revealGrid(state)
+                    print(f"Revealed {action.get_grid().x}, {action.get_grid().y}")
+                    # Toggle flag off
+                    # If it's a mine
+                    if action.get_grid().getVal() == -1:
+                        state.lose()
+                        action.get_grid().mineClicked = True
 
         timer.tick(30)  # Tick fps
-
-        action = agent.get_action(state)
-
-        match action.get_name():
-            case "Exit":
-                state.exit()
-            case "Restart":
-                state.exit()
-                gameLoop()
-            case "Flag":
-                action.get_grid().toggleFlag(state) if not action.get_grid().clicked else None
-            case "Reveal":
-                # ignore if flagged
-                if action.get_grid().flag:
-                    continue
-                # If player left clicked of the grid
-                action.get_grid().revealGrid(state)
-                print(f"Revealed {action.get_grid().x}, {action.get_grid().y}")
-                # Toggle flag off
-                # If it's a mine
-                if action.get_grid().getVal() == -1:
-                    state.lose()
-                    action.get_grid().mineClicked = True
 
 gameLoop()
 pygame.quit()

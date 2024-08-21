@@ -48,10 +48,7 @@ class MineState:
         return actions
     
     def applyAction(self, x, y):
-        if random.random() > 0.3:
-            self.grid[y][x].revealGrid(self)
-        else:
-            self.grid[y][x].toggleFlag(self)
+        pass
     
     def getGrid(self):
         return self.__grid

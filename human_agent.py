@@ -1,7 +1,9 @@
 import pygame
 from action import Action
+from agent import Agent
+import signal
 
-class HumanAgent:
+class HumanAgent(Agent):
     def __init__(self):
         self.clock = pygame.time.Clock()
 
