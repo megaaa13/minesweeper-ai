@@ -5,8 +5,8 @@ import random
 class MineState:
     def __init__(self, game_width, game_height, numMine, grid):
         self.__status = "Playing"
-        self.currentGrid = np.ones((game_height, game_width), dtype=int) * (-2)
-        self.grid = grid
+        self.__currentGrid = np.ones((game_height, game_width), dtype=int) * (-2)
+        self.__grid = grid
         self.mineLeft = numMine
         self.numMine = numMine
         self.game_width = game_width
@@ -28,14 +28,12 @@ class MineState:
         mines = np.array(self.numMine)
         for i in range(self.game_height):
             for j in range(self.game_width):
-                if self.currentGrid[i][j] == -3:
+                if self.__currentGrid[i][j] == -3:
                     mines = np.append(mines, [j, i])
 
     def update(self, x, y, val):
-        self.currentGrid[y][x] = val
+        self.__currentGrid[y][x] = val
         print(f"Updated {x}, {y} to {val}")
-        if self.mineLeft == 0:
-            self.win = True
 
     def getCurrentActions(self):
         actions = []
@@ -54,4 +52,10 @@ class MineState:
             self.grid[y][x].revealGrid(self)
         else:
             self.grid[y][x].toggleFlag(self)
+    
+    def getGrid(self):
+        return self.__grid
+    
+    def getCurrentGrid(self):
+        return self.__currentGrid
                     

@@ -1,6 +1,7 @@
 import pygame
 import random
 import numpy as np
+from threading import Thread
 
 """
 Greatly inspired by ixora-0 work on Minesweeper game in Python
@@ -9,6 +10,9 @@ https://github.com/ixora-0/Minesweeper
 
 
 from state import MineState
+from human_agent import HumanAgent
+from action import Action
+
 pygame.init()
 
 bg_color = (192, 192, 192)
@@ -19,7 +23,7 @@ game_height = 9  # Change this to increase size
 numMine = 10  # Number of mines
 grid_size = 32  # Size of grid (WARNING: make sure to change the images dimension as well)
 border = 16  # Left, Right, Bottom border
-top_border = 100  # Top border
+top_border = 200  # Top border
 display_width = grid_size * game_width + border * 2  # Display width
 display_height = grid_size * game_height + border + top_border  # Display height
 gameDisplay = pygame.display.set_mode((display_width, display_height))  # Create display
@@ -126,15 +130,14 @@ class Grid:
                     gameDisplay.blit(spr_grid, self.rect)
 
     def revealGrid(self, state, depth=0):
+        if self.clicked:
+            return
         self.clicked = True
         if self.flag:
             self.flag = False
             state.mineLeft += 1
-        # Auto reveal if it's a 0
         state.update(self.x, self.y, self.__val)
-        if depth == 0 and self.__val == -1:
-            state.lose()
-            self.mineClicked = True
+        # Auto reveal if it's a 0
         if self.__val == 0:
             for x in range(-1, 2):
                 if self.x + x >= 0 and self.x + x < game_width:
@@ -142,12 +145,19 @@ class Grid:
                         if self.y + y >= 0 and self.y + y < game_height:
                             if not grid[self.y + y][self.x + x].clicked:
                                 grid[self.y + y][self.x + x].revealGrid(state, depth + 1)
-        elif self.__val == -1:
+        elif depth == 0 and self.__val == -1:
+            state.lose()
+            self.mineClicked = True
             # Auto reveal all mines if it's a mine
             print("Revealing all mines")
             for m in self.__mines:
                 if not grid[m[1]][m[0]].clicked and not grid[m[1]][m[0]].flag:
                     grid[m[1]][m[0]].revealGrid(state, depth + 1)
+            # Auto flag all wrong flags
+            for i in range(game_height):
+                for j in range(game_width):
+                    if grid[i][j].flag and grid[i][j].__val != -1:
+                        grid[i][j].mineFalse = True
         
 
     def updateValue(self):
@@ -224,51 +234,17 @@ def gameLoop():
             j.updateValue()
 
     state = MineState(game_width, game_height, numMine, grid)
-    state.applyAction(0, 0)
+    agent = HumanAgent()
+
 
     # Main Loop
     while state.getStatus() != "Exit":
         # Reset screen
         gameDisplay.fill(bg_color)
 
-        # User inputs
-        for event in pygame.event.get():
-            # Check if player close window
-            if event.type == pygame.QUIT:
-                state.exit()
-            # Check if play restart
-            if state.getStatus() == "Game Over" or state.getStatus() == "Win":
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_r:
-                        state.exit()
-                        gameLoop()
-            else:
-                if event.type == pygame.MOUSEBUTTONUP:
-                    x, y = random.choice(state.getCurrentActions())
-                    state.applyAction(x, y)
-                    for i in grid:
-                        for j in i:
-                            if j.rect.collidepoint(event.pos):
-                                if event.button == 1:
-                                    # ignore if flagged
-                                    if j.flag:
-                                        continue
-                                    # If player left clicked of the grid
-                                    j.revealGrid(state)
-                                    print(state.currentGrid)
-                                    # Toggle flag off
-                                    # If it's a mine
-                                    if j.getVal() == -1:
-                                        state.lose()
-                                        j.mineClicked = True
-                                elif event.button == 3:
-                                    # If the player right clicked
-                                    if not j.clicked:
-                                        j.toggleFlag(state)
-
         # Check if won
         w = True
-        for i in grid:
+        for i in state.getGrid():
             for j in i:
                 j.drawGrid()
                 if not j.checkWin():
@@ -280,16 +256,11 @@ def gameLoop():
         if state.getStatus() != "Game Over" and state.getStatus() != "Win":
             t += 1
         elif state.getStatus() == "Game Over":
-            drawText("Game Over!", 50)
-            drawText("R to restart", 35, 50)
-            for i in grid:
-                for j in i:
-                    if j.flag and j.getVal() != -1:
-                        print(j.getVal())
-                        j.mineFalse = True
+            drawText("Game Over!", 50, -230)
+            drawText("R to restart", 35, -180)
         else:
-            drawText("You WON!", 50)
-            drawText("R to restart", 35, 50)
+            drawText("You WON!", 50, -230)
+            drawText("R to restart", 35, -180)
         # Draw time
         s = str(t // 30)
         screen_text = pygame.font.SysFont("Calibri", 50).render(s, True, (0, 0, 0))
@@ -302,6 +273,28 @@ def gameLoop():
 
         timer.tick(30)  # Tick fps
 
+        action = agent.get_action(state)
+
+        match action.get_name():
+            case "Exit":
+                state.exit()
+            case "Restart":
+                state.exit()
+                gameLoop()
+            case "Flag":
+                action.get_grid().toggleFlag(state) if not action.get_grid().clicked else None
+            case "Reveal":
+                # ignore if flagged
+                if action.get_grid().flag:
+                    continue
+                # If player left clicked of the grid
+                action.get_grid().revealGrid(state)
+                print(f"Revealed {action.get_grid().x}, {action.get_grid().y}")
+                # Toggle flag off
+                # If it's a mine
+                if action.get_grid().getVal() == -1:
+                    state.lose()
+                    action.get_grid().mineClicked = True
 
 gameLoop()
 pygame.quit()
