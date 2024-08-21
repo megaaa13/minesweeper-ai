@@ -4,14 +4,25 @@ import random
 
 class MineState:
     def __init__(self, game_width, game_height, numMine, grid):
-        self.win = False
-        self.lose = False
+        self.__status = "Playing"
         self.currentGrid = np.ones((game_height, game_width), dtype=int) * (-2)
         self.grid = grid
         self.mineLeft = numMine
         self.numMine = numMine
         self.game_width = game_width
         self.game_height = game_height
+
+    def lose(self):
+        self.__status = "Game Over"
+    
+    def win(self):
+        self.__status = "Win"
+
+    def exit(self):
+        self.__status = "Exit"
+
+    def getStatus(self):
+        return self.__status
     
     def getMinePos(self):
         mines = np.array(self.numMine)
@@ -41,5 +52,6 @@ class MineState:
     def applyAction(self, x, y):
         if random.random() > 0.3:
             self.grid[y][x].revealGrid(self)
-        self.grid[y][x].toggleFlag(self)
+        else:
+            self.grid[y][x].toggleFlag(self)
                     
